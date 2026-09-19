@@ -138,6 +138,7 @@
     .add-button:focus-visible,
     .theme-toggle:focus-visible,
     .filter-button:focus-visible,
+    .clear-completed-button:focus-visible,
     .delete-button:focus-visible,
     .todo-checkbox:focus-visible {
       outline: 3px solid var(--focus-ring);
@@ -278,12 +279,36 @@
     }
 
     .app-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
       margin-top: 20px;
       padding-top: 16px;
       color: var(--text-secondary);
       border-top: 1px solid var(--border);
       font-size: 0.9rem;
-      text-align: right;
+    }
+
+    .clear-completed-button {
+      flex: 0 0 auto;
+      padding: 7px 10px;
+      color: var(--danger);
+      background: transparent;
+      border: 1px solid var(--danger);
+      border-radius: 6px;
+      font: inherit;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    .clear-completed-button:hover:not(:disabled) {
+      background: var(--danger-background);
+    }
+
+    .clear-completed-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
     }
 
     /* 僅供螢幕閱讀器讀取的文字 */
@@ -383,22 +408,47 @@
 
     <footer class="app-footer">
       <span id="remaining-count">未完成:0 項</span>
+      <button
+        id="clear-completed"
+        class="clear-completed-button"
+        type="button"
+        aria-label="清除所有已完成的待辦事項"
+      >清除已完成</button>
     </footer>
   </main>
 
   <script>
+    const STORAGE_KEY = 'todo-list-items';
     const form = document.querySelector('#todo-form');
     const input = document.querySelector('#todo-input');
     const list = document.querySelector('#todo-list');
     const emptyState = document.querySelector('#empty-state');
     const remainingCount = document.querySelector('#remaining-count');
+    const clearCompletedButton = document.querySelector('#clear-completed');
     const themeToggle = document.querySelector('#theme-toggle');
     const filterButtons = document.querySelectorAll('.filter-button');
     const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
 
-    let todos = [];
+    let todos = loadTodos();
     let activeFilter = 'all';
     let hasManualTheme = false;
+
+    // 從 localStorage 讀取待辦資料,格式錯誤時使用空清單
+    function loadTodos() {
+      try {
+        const savedTodos = localStorage.getItem(STORAGE_KEY);
+        const parsedTodos = savedTodos ? JSON.parse(savedTodos) : [];
+        return Array.isArray(parsedTodos) ? parsedTodos : [];
+      } catch (error) {
+        console.warn('無法讀取待辦資料,將使用空清單。', error);
+        return [];
+      }
+    }
+
+    // 將待辦資料保存到 localStorage
+    function saveTodos() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+    }
 
     // 套用主題並更新切換按鈕的提示
     function applyTheme(theme) {
@@ -460,6 +510,10 @@
 
       const remaining = todos.filter((todo) => !todo.completed).length;
       remainingCount.textContent = `未完成:${remaining} 項`;
+
+      const hasCompletedTodos = todos.some((todo) => todo.completed);
+      clearCompletedButton.hidden = !hasCompletedTodos;
+      clearCompletedButton.disabled = !hasCompletedTodos;
     }
 
     themeToggle.addEventListener('click', () => {
@@ -504,6 +558,7 @@
         completed: false,
       });
 
+      saveTodos();
       renderTodos();
       form.reset();
       input.focus();
@@ -518,6 +573,7 @@
       if (!todo) return;
 
       todo.completed = event.target.checked;
+      saveTodos();
       renderTodos();
     });
 
@@ -527,6 +583,19 @@
 
       const item = deleteButton.closest('.todo-item');
       todos = todos.filter((todo) => todo.id !== item.dataset.id);
+      saveTodos();
+      renderTodos();
+    });
+
+    clearCompletedButton.addEventListener('click', () => {
+      const completedCount = todos.filter((todo) => todo.completed).length;
+      if (!completedCount) return;
+
+      const confirmed = window.confirm(`確定要刪除 ${completedCount} 個已完成的待辦事項嗎?`);
+      if (!confirmed) return;
+
+      todos = todos.filter((todo) => !todo.completed);
+      saveTodos();
       renderTodos();
     });
 
